@@ -1,0 +1,87 @@
+.app {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 4rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  text-align: center;
+}
+
+.app__badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  background: #646cff;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.app__title {
+  margin: 1rem 0 0.5rem;
+  font-size: 2.25rem;
+  line-height: 1.1;
+}
+
+.app__subtitle {
+  margin: 0;
+  color: #888;
+}
+
+.app__card {
+  padding: 2rem;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.app__button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1rem;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  color: #fff;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+
+.app__button:hover {
+  border-color: #646cff;
+}
+
+.app__hint {
+  margin: 0;
+  color: #888;
+  font-size: 0.9rem;
+}
+
+.app__footer {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+}
+
+.app__footer a {
+  color: #646cff;
+  text-decoration: none;
+}
+
+.app__footer a:hover {
+  text-decoration: underline;
+}
+
+@media (prefers-color-scheme: light) {
+  .app__button {
+    background-color: #f9f9f9;
+    color: #213547;
+  }
+}
