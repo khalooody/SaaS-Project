@@ -17,7 +17,8 @@
  *   8. Footer slides up, light sweep passes over the headline
  *
  * Usage: File > Scripts > Run Script File... > this file.
- * When done it exports <PSD folder>/Madallal_Post_1080x1350.mp4 (H.264).
+ * When done it saves Madallal_Post_Animation.aep and exports
+ * Madallal_Post_1080x1350.mp4 (H.264) into CONFIG.projectFolder (next to the PSD).
  * Every setting lives in CONFIG / TIMING below.
  */
 
@@ -27,7 +28,10 @@
     // CONFIG
     // ------------------------------------------------------------------
     var CONFIG = {
-        psdPath: "D:\\2026\\\u062a\u062d\u0631\u064a\u0643 \u0628\u0648\u0633\u062a\u0627\u062a\\\u062a\u062d\u0631\u064a\u0643 \u0628\u0648\u0633\u062a \u062c\u062f\u064a\u062f\\\u062f\u0648\u0631\u060c \u0627\u062e\u062a\u0627\u0631\u060c \u0648\u0627\u0633\u062a\u0641\u0627\u062f.. \u0648\u064a\u0627 \u0645\u062f\u0644\u0644..psd",
+        // Project folder: the .aep and the .mp4 are saved here, next to the PSD
+        projectFolder: "D:\\2026\\\u062a\u062d\u0631\u064a\u0643 \u0628\u0648\u0633\u062a\u0627\u062a\\\u062a\u062d\u0631\u064a\u0643 \u0628\u0648\u0633\u062a \u062c\u062f\u064a\u062f",
+        psdName: "\u062f\u0648\u0631\u060c \u0627\u062e\u062a\u0627\u0631\u060c \u0648\u0627\u0633\u062a\u0641\u0627\u062f.. \u0648\u064a\u0627 \u0645\u062f\u0644\u0644..psd",
+        projectName: "Madallal_Post_Animation",
         finalCompName: "Madallal_Post_1080x1350",
         // MP4 is written next to the PSD with this name
         outputName: "Madallal_Post_1080x1350.mp4",
@@ -179,7 +183,7 @@
     var OUTPUT_FOLDER = null;
 
     function importPSD() {
-        var f = new File(CONFIG.psdPath);
+        var f = new File(CONFIG.projectFolder + "\\" + CONFIG.psdName);
         if (!f.exists) {
             f = File.openDialog("\u0627\u062e\u062a\u0631 \u0645\u0644\u0641 PSD \u0627\u0644\u062e\u0627\u0635 \u0628\u0627\u0644\u0628\u0648\u0633\u062a / Select the post PSD", "*.psd");
             if (!f) return null;
@@ -632,9 +636,29 @@
     // Returns a status message. Renders in AE directly when an H.264 output
     // template exists (AE 2023+); otherwise saves the project and sends it
     // to Adobe Media Encoder.
+    function projectFolder() {
+        if (OUTPUT_FOLDER && OUTPUT_FOLDER.exists) return OUTPUT_FOLDER;
+        var f = new Folder(CONFIG.projectFolder);
+        if (f.exists) return f;
+        return app.project.file ? app.project.file.parent : Folder.desktop;
+    }
+
+    // Next free name: name.ext, name_v2.ext, name_v3.ext ... (never overwrites)
+    function freeFile(folder, base, ext) {
+        var f = new File(folder.fsName + "/" + base + ext), v = 2;
+        while (f.exists) { f = new File(folder.fsName + "/" + base + "_v" + v + ext); v++; }
+        return f;
+    }
+
+    function saveProject() {
+        var f = freeFile(projectFolder(), CONFIG.projectName, ".aep");
+        app.project.save(f);
+        return f;
+    }
+
     function exportMP4(comp) {
-        var folder = OUTPUT_FOLDER || (app.project.file ? app.project.file.parent : Folder.desktop);
-        var out = new File(folder.fsName + "/" + CONFIG.outputName);
+        var folder = projectFolder();
+        var out = freeFile(folder, CONFIG.outputName.replace(/\.mp4$/i, ""), ".mp4");
         var rq = app.project.renderQueue;
         var item = rq.items.add(comp);
         try {
@@ -657,13 +681,9 @@
             return "MP4 exported:\n" + out.fsName;
         }
 
-        // Older AE: hand over to Media Encoder (project must be saved first)
+        // Older AE: hand over to Media Encoder (reads the saved project)
         om.file = new File(out.fsName.replace(/\.mp4$/i, ".mov"));
-        if (!app.project.file) {
-            app.project.save(new File(folder.fsName + "/" + CONFIG.finalCompName + ".aep"));
-        } else {
-            app.project.save();
-        }
+        app.project.save();
         if (rq.canQueueInAME) {
             rq.queueInAME(true);
             return "Sent to Adobe Media Encoder. Choose the H.264 preset there if it is not selected.\n" +
@@ -820,9 +840,11 @@
         fin.openInViewer();
 
         var exportMsg = "";
+        try { exportMsg = "\n\nProject saved:\n" + saveProject().fsName; }
+        catch (e10) { exportMsg = "\n\nCould not save the project: " + e10.toString(); }
         if (opts.exportMP4) {
-            try { exportMsg = "\n\n" + exportMP4(fin); }
-            catch (e9) { exportMsg = "\n\nExport failed: " + e9.toString() + "\nRender the comp from the Render Queue."; }
+            try { exportMsg += "\n\n" + exportMP4(fin); }
+            catch (e9) { exportMsg += "\n\nExport failed: " + e9.toString() + "\nRender the comp from the Render Queue."; }
         }
 
         var counts = [];
