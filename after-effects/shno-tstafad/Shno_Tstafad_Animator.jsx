@@ -23,6 +23,9 @@
  * - Makes two versions from it: Alwatani and Earthlink. Brand-only layers
  *   are switched per version; if the PSD has no Earthlink logo you can pick
  *   a logo file and it is placed and animated automatically.
+ * - Earthlink theme: the Earthlink logo and background can be pulled from
+ *   another PSD in the same folder (picked in the dialog); the layers found
+ *   there are copied into the Earthlink version only.
  * - Saves <projectName>.aep and renders both MP4s into CONFIG.projectFolder.
  *
  * Usage: File > Scripts > Run Script File... > this file.
@@ -431,8 +434,33 @@
         g1.add("statictext", undefined, "Export:");
         var ver = g1.add("dropdownlist", undefined, ["Alwatani + Earthlink", "Alwatani only", "Earthlink only"]);
         ver.selection = 0;
+        // Earthlink theme PSD (logo + background) from the same folder
+        var gT = bp.add("group");
+        gT.add("statictext", undefined, "Earthlink theme from PSD:");
+        var psds = [], pnames = ["(none)"];
+        try {
+            var all = projectFolder().getFiles("*.psd");
+            for (var pf = 0; pf < all.length; pf++) {
+                if (!(all[pf] instanceof File)) continue;
+                if (decodeURI(all[pf].name) === CONFIG.psdName) continue;
+                psds.push(all[pf]); pnames.push(decodeURI(all[pf].name));
+            }
+        } catch (ef) {}
+        var themeDD = gT.add("dropdownlist", undefined, pnames);
+        themeDD.preferredSize.width = 330;
+        var pick = 0;
+        for (var pp = 0; pp < psds.length; pp++) if (brandOf(decodeURI(psds[pp].name)) === "EARTHLINK") { pick = pp + 1; break; }
+        if (!pick) for (var pq = 0; pq < psds.length; pq++) if (/\u0645\u062f\u0644\u0644/.test(decodeURI(psds[pq].name))) { pick = pq + 1; break; }
+        if (!pick && psds.length) pick = 1;
+        themeDD.selection = pick;
+        var themeBrowse = gT.add("button", undefined, "Other...");
+        themeBrowse.onClick = function () {
+            var f = File.openDialog("PSD with the Earthlink logo / background", "*.psd");
+            if (f) { psds.push(f); themeDD.add("item", decodeURI(f.name)); themeDD.selection = psds.length; }
+        };
+
         var g2 = bp.add("group");
-        g2.add("statictext", undefined, "Earthlink logo file (only if the PSD has none):");
+        g2.add("statictext", undefined, "Earthlink logo file (if neither PSD has one):");
         var logoTxt = g2.add("edittext", undefined, "", { readonly: true });
         logoTxt.characters = 34;
         var browse = g2.add("button", undefined, "Browse...");
@@ -458,7 +486,8 @@
             motionBlur: cbMB.value, exportMP4: cbMP4.value,
             alwatani: ver.selection.index !== 2, earthlink: ver.selection.index !== 1,
             logoFile: logoFile, logoPos: ["top-left", "top-right", "same"][posDD.selection.index],
-            tint: cbTint.value
+            tint: cbTint.value,
+            themeFile: (themeDD.selection && themeDD.selection.index > 0) ? psds[themeDD.selection.index - 1] : null
         };
     }
 
@@ -862,6 +891,123 @@
         return null;
     }
 
+    // ------------------------------------------------------------------
+    // EARTHLINK THEME FROM ANOTHER PSD
+    // ------------------------------------------------------------------
+    function effBrand(it) {
+        while (it) { if (brandOf(it.name) !== "ALL") return brandOf(it.name); it = it.parent; }
+        return "ALL";
+    }
+
+    function isAncestor(a, it) {
+        for (var u = it.parent; u; u = u.parent) if (u === a) return true;
+        return false;
+    }
+
+    // Imports the theme PSD and returns {comp, logo:[items], bg:[items]}
+    // after the user confirmed the auto-picked layers.
+    function loadTheme(file) {
+        var io = new ImportOptions(file);
+        io.importAs = io.canImportAs(ImportAsType.COMP_CROPPED_LAYERS) ? ImportAsType.COMP_CROPPED_LAYERS : ImportAsType.COMP;
+        var tc = app.project.importFile(io);
+        if (!(tc instanceof CompItem)) return null;
+        prepComp(tc, {});
+        var TW = tc.width, TH = tc.height;
+        var ti = [];
+        collect(tc, { s: 1, ox: 0, oy: 0 }, 0, null, ti);
+
+        var anyEarth = false;
+        for (var i = 0; i < ti.length; i++) { ti[i].eb = effBrand(ti[i]); ti[i].use = "-"; if (ti[i].eb === "EARTHLINK") anyEarth = true; }
+
+        // Logo: Earthlink layer near the top (or any logo-named layer if the
+        // PSD has no Earthlink tags at all); shallowest, topmost wins.
+        var logo = null;
+        for (var a = 0; a < ti.length; a++) {
+            var r = ti[a].rect, full = r.w >= TW * 0.9 && r.h >= TH * 0.9;
+            var okBrand = anyEarth ? ti[a].eb === "EARTHLINK" : /logo|\u0644\u0648\u062c\u0648|\u0644\u0648\u06af\u0648|\u0644\u0648\u063a\u0648|\u0634\u0639\u0627\u0631/i.test(ti[a].name);
+            if (!okBrand || full || r.cy > TH * 0.22 || r.w > TW * 0.6) continue;
+            if (!logo || ti[a].depth < logo.depth) logo = ti[a];
+        }
+        if (logo) logo.use = "LOGO";
+
+        // Background: full-frame Earthlink layers, deepest ones only
+        var cands = [];
+        for (var b = 0; b < ti.length; b++) {
+            var rb = ti[b].rect;
+            if (!(rb.w >= TW * 0.9 && rb.h >= TH * 0.9)) continue;
+            if (anyEarth ? ti[b].eb !== "EARTHLINK" : !/\bbg\b|background|\u062e\u0644\u0641\u064a|\u062e\u0644\u0641\u064a\u0629/i.test(ti[b].name)) continue;
+            cands.push(ti[b]);
+        }
+        if (!anyEarth && !cands.length) {
+            for (var c = ti.length - 1; c >= 0; c--) {
+                var rc = ti[c].rect;
+                if (ti[c].depth === 0 && rc.w >= TW * 0.9 && rc.h >= TH * 0.9) { cands.push(ti[c]); break; }
+            }
+        }
+        for (var d = 0; d < cands.length; d++) {
+            var parentOfOther = logo && isAncestor(cands[d], logo);
+            for (var e = 0; e < cands.length && !parentOfOther; e++) if (e !== d && isAncestor(cands[d], cands[e])) parentOfOther = true;
+            if (!parentOfOther) cands[d].use = "BG";
+        }
+
+        var USES = [["-", "- (not used)"], ["LOGO", "Earthlink logo"], ["BG", "Earthlink background"]];
+        var useIdx = function (id) { for (var q = 0; q < USES.length; q++) if (USES[q][0] === id) return q; return 0; };
+        var w = new Window("dialog", "Earthlink theme - " + decodeURI(file.name));
+        w.orientation = "column"; w.alignChildren = ["fill", "top"];
+        w.add("statictext", undefined, "Layers copied into the Earthlink version. Check the picks, change with Assign.");
+        var lb = w.add("listbox", [0, 0, 700, 380], [], {
+            numberOfColumns: 3, showHeaders: true, columnTitles: ["#", "Layer", "Use as"],
+            columnWidths: [40, 440, 200], multiselect: true
+        });
+        for (var j = 0; j < ti.length; j++) {
+            var ind = "";
+            for (var k = 0; k < ti[j].depth; k++) ind += "    ";
+            var li = lb.add("item", String(j + 1));
+            li.subItems[0].text = ind + (ti[j].depth ? "> " : "") + ti[j].name;
+            li.subItems[1].text = USES[useIdx(ti[j].use)][1];
+        }
+        var g = w.add("group");
+        var labels = [];
+        for (var q2 = 0; q2 < USES.length; q2++) labels.push(USES[q2][1]);
+        var dd = g.add("dropdownlist", undefined, labels);
+        dd.selection = 0;
+        var asg = g.add("button", undefined, "Assign");
+        asg.onClick = function () {
+            var sel = lb.selection;
+            if (!sel || !dd.selection) return;
+            if (!(sel instanceof Array)) sel = [sel];
+            for (var m = 0; m < sel.length; m++) {
+                ti[sel[m].index].use = USES[dd.selection.index][0];
+                sel[m].subItems[1].text = USES[dd.selection.index][1];
+            }
+        };
+        var bb = w.add("group");
+        bb.alignment = "right";
+        bb.add("button", undefined, "Skip theme", { name: "cancel" });
+        bb.add("button", undefined, "Use theme", { name: "ok" });
+        if (w.show() !== 1) return null;
+
+        var out = { comp: tc, logo: [], bg: [] };
+        for (var n2 = 0; n2 < ti.length; n2++) {
+            if (ti[n2].use === "LOGO") out.logo.push(ti[n2]);
+            if (ti[n2].use === "BG") out.bg.push(ti[n2]);
+        }
+        return out;
+    }
+
+    // Copy a theme layer into dest, keeping where it sits in the theme design
+    // (nested group offsets and a different PSD size are compensated).
+    function copyThemeLayer(item, dest, ratio) {
+        item.layer.copyToComp(dest);
+        var L = dest.layer(1);
+        try { L.enabled = true; } catch (e0) {}
+        var xf = item.xf, p = pPos(L).value, sc = pScl(L).value;
+        pPos(L).setValue(fitv(pPos(L), [(xf.ox + xf.s * p[0]) * ratio, (xf.oy + xf.s * p[1]) * ratio]));
+        pScl(L).setValue(fitv(pScl(L), [sc[0] * xf.s * ratio, sc[1] * xf.s * ratio]));
+        try { L.inPoint = 0; L.outPoint = CONFIG.duration; } catch (e1) {}
+        return L;
+    }
+
     function makeFinal(src, name, motionBlur) {
         var fin = app.project.items.addComp(name, CONFIG.width, CONFIG.height, 1, CONFIG.duration, CONFIG.fps);
         fin.bgColor = [0.02, 0.18, 0.62];
@@ -910,6 +1056,11 @@
 
         var opts = reviewDialog(items, root.name);
         if (!opts) return;
+
+        var theme = null;
+        if (opts.earthlink && opts.themeFile) {
+            try { theme = loadTheme(opts.themeFile); } catch (eth) { theme = null; }
+        }
 
         // Scene rects (root space)
         // Missing pieces fall back to whatever exists, then to the frame centre,
@@ -1044,8 +1195,46 @@
                 }
             }
 
-            // No Earthlink layer in the PSD: place the picked logo file
-            if (!hasEarthLayers && opts.logoFile) {
+            // Earthlink theme from the other PSD
+            var themeLogo = false;
+            if (theme) {
+                var ratio = rootE.width / theme.comp.width;
+                if (theme.bg.length) {
+                    for (var t1 = 0; t1 < items.length; t1++) {
+                        if (items[t1].role !== "BG") continue;
+                        var ob = layerInVariant(items[t1], rootE, cache);
+                        if (ob) ob.enabled = false;
+                    }
+                    // keep the theme's own stacking: copy bottom-most first
+                    for (var t2 = theme.bg.length - 1; t2 >= 0; t2--) {
+                        var BL = copyThemeLayer(theme.bg[t2], rootE, ratio);
+                        BL.moveToEnd();
+                        BL.name = "Earthlink BG - " + theme.bg[t2].name;
+                        animBG({ layer: BL, comp: rootE, xf: { s: 1, ox: 0, oy: 0 } });
+                    }
+                }
+                for (var t3 = theme.logo.length - 1; t3 >= 0; t3--) {
+                    var TL = copyThemeLayer(theme.logo[t3], rootE, ratio);
+                    TL.name = "Earthlink Logo - " + theme.logo[t3].name;
+                    animLogo({ layer: TL }, 0);
+                    if (opts.motionBlur) { try { TL.motionBlur = true; } catch (em) {} }
+                    themeLogo = true;
+                }
+                // Theme logo replaces any Earthlink logo inside the main PSD
+                if (themeLogo) {
+                    for (var t4 = 0; t4 < items.length; t4++) {
+                        if (items[t4].brand === "EARTHLINK" && items[t4].role === "LOGO") {
+                            var oe = layerInVariant(items[t4], rootE, cache);
+                            if (oe) oe.enabled = false;
+                        }
+                    }
+                }
+                brandNote += "\n\nEarthlink theme from: " + decodeURI(opts.themeFile.name) +
+                    "\n  logo layers: " + theme.logo.length + ", background layers: " + theme.bg.length;
+            }
+
+            // No Earthlink logo anywhere: place the picked logo file
+            if (!themeLogo && !hasEarthLayers && opts.logoFile) {
                 var ref = null;
                 for (var e3 = 0; e3 < items.length; e3++) {
                     if (items[e3].role === "LOGO" && items[e3].brand === "ALWATANI") ref = ref || items[e3];
@@ -1067,8 +1256,8 @@
                 LL.outPoint = CONFIG.duration;
                 animLogo({ layer: LL }, 0);
                 if (opts.motionBlur) { try { LL.motionBlur = true; } catch (eb) {} }
-            } else if (!hasEarthLayers) {
-                brandNote = "\n\nNote: no Earthlink layer was found and no logo file was picked -\n" +
+            } else if (!themeLogo && !hasEarthLayers) {
+                brandNote += "\n\nNote: no Earthlink layer was found and no logo file was picked -\n" +
                     "the Earthlink version has the Alwatani-only layers hidden and no Earthlink logo.";
             }
         }
