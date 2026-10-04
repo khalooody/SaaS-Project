@@ -26,7 +26,9 @@
  * - Earthlink theme: the Earthlink logo and background can be pulled from
  *   another PSD in the same folder (picked in the dialog); the layers found
  *   there are copied into the Earthlink version only.
- * - Saves <projectName>.aep and renders both MP4s into CONFIG.projectFolder.
+ * - Starts a NEW After Effects project (the open one is closed, with a
+ *   prompt to save it if it has changes), saves <projectName>.aep in
+ *   CONFIG.projectFolder and renders both MP4s into <projectFolder>\render.
  *
  * Usage: File > Scripts > Run Script File... > this file.
  */
@@ -41,6 +43,8 @@
         projectFolder: "D:\\2026\\\u062a\u062d\u0631\u064a\u0643 \u0628\u0648\u0633\u062a\u0627\u062a\\\u062a\u062d\u0631\u064a\u0643 \u0628\u0648\u0633\u062a \u062c\u062f\u064a\u062f",
         psdName: "\u0634\u0646\u0648 \u0627\u0644\u064a \u062a\u0633\u062a\u0641\u0627\u062f \u0645\u0646\u0647 \u0627\u0643\u062b\u0631.psd",
         projectName: "Shno_Tstafad_Animation",
+        // MP4s go to <projectFolder>\<renderFolderName> (created if missing)
+        renderFolderName: "render",
         // Final comps / MP4s: <baseName>_Alwatani_1080x1350(.mp4) and _Earthlink_
         baseName: "Shno_Tstafad",
         // Where a picked Earthlink logo file goes: "top-left", "top-right" or "same"
@@ -825,8 +829,14 @@
     }
 
     // jobs: [{comp, name}] -> renders every comp to <name>.mp4 in one pass.
+    function renderFolder() {
+        var f = new Folder(projectFolder().fsName + "/" + CONFIG.renderFolderName);
+        if (!f.exists) f.create();
+        return f.exists ? f : projectFolder();
+    }
+
     function exportMP4s(jobs) {
-        var folder = projectFolder();
+        var folder = renderFolder();
         var rq = app.project.renderQueue;
         for (var q = 1; q <= rq.numItems; q++) {
             try { if (rq.item(q).status === RQItemStatus.QUEUED) rq.item(q).render = false; } catch (e) {}
@@ -1024,16 +1034,18 @@
     // ------------------------------------------------------------------
     // MAIN
     // ------------------------------------------------------------------
+    // Fresh project: close the open one (asks to save if it has changes)
+    if (app.project) {
+        if (!app.project.close(CloseOptions.PROMPT_TO_SAVE_CHANGES)) {
+            alert("Cancelled - the current project was kept open.");
+            return;
+        }
+    }
+    if (!app.newProject()) { alert("Could not create a new After Effects project."); return; }
+
     app.beginUndoGroup("Post Animator - Brands");
     try {
-        var root = null;
-        var active = app.project.activeItem;
-        if (active instanceof CompItem &&
-            confirm("Use the active comp \"" + active.name + "\" instead of importing the PSD?")) {
-            root = active;
-        } else {
-            root = importPSD();
-        }
+        var root = importPSD();
         if (!root) { alert("PSD comp not found / import cancelled."); return; }
 
         prepComp(root, {});
