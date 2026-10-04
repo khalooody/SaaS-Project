@@ -1034,6 +1034,23 @@
     // ------------------------------------------------------------------
     // MAIN
     // ------------------------------------------------------------------
+    // Saving the project and rendering need file access for scripts
+    try {
+        if (app.preferences.getPrefAsLong("Main Pref Section", "Pref_SCRIPTING_FILE_NETWORK_SECURITY") !== 1) {
+            alert("After Effects blocks scripts from writing files, so nothing can be saved or rendered.\n\n" +
+                "Turn it on:\nEdit > Preferences > Scripting & Expressions >\n" +
+                "Allow Scripts to Write Files and Access Network\n\nThen run the script again.");
+            return;
+        }
+    } catch (ep) {}
+
+    // Create the render folder up front so a missing/locked folder shows now
+    var RF = new Folder(CONFIG.projectFolder + "\\" + CONFIG.renderFolderName);
+    if (new Folder(CONFIG.projectFolder).exists && !RF.exists && !RF.create()) {
+        alert("Could not create the render folder:\n" + RF.fsName + "\n\n" + (RF.error || ""));
+        return;
+    }
+
     // Fresh project: close the open one (asks to save if it has changes)
     if (app.project) {
         if (!app.project.close(CloseOptions.PROMPT_TO_SAVE_CHANGES)) {
