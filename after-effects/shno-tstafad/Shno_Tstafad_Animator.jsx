@@ -4,6 +4,16 @@
  * Post: "Shno elli tstafad minna akthar" (default PSD in CONFIG.psdName)
  * 1080 x 1350, 30 fps, 10 s.
  *
+ * Story (this post: robot mascot + phone, no chair):
+ *   1. Background push-in, Alwatani / Earthlink logo drops in
+ *   2. Robot flies in from bottom-left, lands with a bounce, then hovers;
+ *      its eyes blink (if the eyes are a separate layer)
+ *   3. Phone pops out of the robot's hand
+ *   4. Headline wipes in RTL line by line, the yellow word pops
+ *   5. Stickers burst out of the robot (left side) and the phone (right
+ *      side / bottom) on an arc, then wiggle until the end
+ *   6. Footer slides up, light sweeps over the headline
+ *
  * - Imports the layered PSD and auto-detects a role for every layer
  *   (background, logo, headline, main subject, pop elements, footer...)
  *   and a brand tag (All / Alwatani only / Earthlink only). Both are
@@ -37,6 +47,8 @@
         earthlinkTintDark: [0.0, 0.22, 0.45],
         earthlinkTintLight: [0.62, 0.92, 1.0],
         earthlinkTintAmount: 65,
+        // Headline words that get the "accent" pop (the yellow word)
+        accentWords: ["\u062a\u0633\u062a\u0641\u0627\u062f"],
         width: 1080,
         height: 1350,
         fps: 30,
@@ -68,6 +80,13 @@
         shines: [3.6, 6.8]
     };
 
+    // Used instead of the chair timings when the PSD has no chair
+    // (mascot enters first, phone pops from its hand, everything earlier).
+    var TIMING_NO_CHAIR = {
+        person: 0.4, phone: 0.95, glow: 1.25, phoneUI: 1.3,
+        headline: 1.15, accent: 1.75, elements: 1.6, footer: 2.5
+    };
+
     // Wiggle defaults (live-editable later on the CTRL_Wiggle null)
     var WIGGLE = { freq: 1.2, posAmp: 9, rotAmp: 5, breath: 3 };
 
@@ -91,6 +110,7 @@
         { id: "PERSON",          label: "Character / main subject" },
         { id: "ELEMENT",         label: "Pop element + wiggle" },
         { id: "COIN",            label: "Coin element (pop + flip)" },
+        { id: "EYES",            label: "Eyes (blink)" },
         { id: "FOOTER",          label: "Footer item" },
         { id: "SWOOSH",          label: "Footer swoosh line" },
         { id: "FADE",            label: "Generic fade-in" }
@@ -280,6 +300,8 @@
 
         // Hidden brand layers (e.g. a hidden Earthlink logo) still get animated
         if (!L.enabled && brandOf(item.name) === "ALL") return "IGNORE";
+        // Eyes blink even when they live inside the animated robot group
+        if (L.enabled && has(/\beyes?\b|\u0639\u064a\u0646|\u0639\u064a\u0648\u0646/)) return "EYES";
         if (item.parent && item.parent.role !== "IGNORE") return "IGNORE";
         if (L.adjustmentLayer) return "IGNORE";
 
@@ -293,7 +315,7 @@
         if (has(/glow|neon|\u062a\u0648\u0647\u062c|\u0646\u064a\u0648\u0646|frame|\u0627\u0637\u0627\u0631|\u0625\u0637\u0627\u0631|\u0628\u0631\u0648\u0627\u0632/)) return "PHONE_GLOW";
         if (has(/chair|sofa|couch|\u0643\u0631\u0633\u064a|\u0643\u0646\u0628|\u0642\u0646\u0641\u0629|\u0642\u0646\u0641\u0647/)) return "CHAIR";
         if (has(/phone|mobile|iphone|\u0645\u0648\u0628\u0627\u064a\u0644|\u0647\u0627\u062a\u0641|\u062c\u0648\u0627\u0644|\u062a\u0644\u0641\u0648\u0646/)) return "PHONE";
-        if (has(/girl|woman|model|person|character|\u0628\u0646\u062a|\u0641\u062a\u0627\u0629|\u0634\u062e\u0635\u064a|\u0645\u0648\u062f\u064a\u0644|\u0627\u0645\u0631\u0623\u0629|\u0645\u0631\u0623\u0629|\u0641\u062a\u0627\u0647/)) return "PERSON";
+        if (has(/robot|mascot|bot\b|\u0631\u0648\u0628\u0648\u062a|\u0631\u0628\u0648\u062a|girl|woman|model|person|character|\u0628\u0646\u062a|\u0641\u062a\u0627\u0629|\u0634\u062e\u0635\u064a|\u0645\u0648\u062f\u064a\u0644|\u0627\u0645\u0631\u0623\u0629|\u0645\u0631\u0623\u0629|\u0641\u062a\u0627\u0647/)) return "PERSON";
         if (has(/swoosh|wave|curve|\u0645\u0648\u062c\u0629|\u0645\u0646\u062d\u0646\u0649/)) return "SWOOSH";
         if (has(/itpc|6119|\u0627\u062a\u0635\u0644|\u0648\u0632\u0627\u0631\u0629|\u062a\u0639\u062a\u0645\u062f/)) return "FOOTER";
         if (has(/logo|\u0644\u0648\u062c\u0648|\u0644\u0648\u063a\u0648|\u0634\u0639\u0627\u0631|\u0627\u0644\u0648\u0637\u0646\u064a|\u0627\u064a\u0631\u062b\u0644\u0646\u0643|earthlink/)) return r.cy > H * 0.8 ? "FOOTER" : "LOGO";
@@ -302,17 +324,25 @@
 
         if (partlyOff && r.w < W * 0.5 && r.h < H * 0.5) return "BG_FLOAT";
 
-        if (r.cy > H * 0.87) return "FOOTER";
-        if (r.cy < H * 0.13) return "LOGO";
-        if (r.cy < H * 0.23) return (r.cx < W * 0.38 && r.w < W * 0.4) ? "HEADLINE_ACCENT" : "HEADLINE";
-
         var small = r.w < W * 0.3 && r.h < H * 0.25;
-        var side = r.cx < W * 0.37 || r.cx > W * 0.63;
+
+        // Bottom strip: footer, except a sticker sitting in the middle (the burger)
+        if (r.cy > H * 0.87) return (small && r.cx > W * 0.38 && r.cx < W * 0.62 && r.cy < H * 0.97) ? "ELEMENT" : "FOOTER";
+        if (r.cy < H * 0.13) return "LOGO";
+        if (r.cy < H * 0.26) {
+            for (var aw = 0; aw < CONFIG.accentWords.length; aw++) {
+                if (n.indexOf(CONFIG.accentWords[aw]) >= 0) return "HEADLINE_ACCENT";
+            }
+            return "HEADLINE";
+        }
+
+        var side = r.cx < W * 0.4 || r.cx > W * 0.6;
         if (isCoin && small) return "COIN";
-        if (small && side && r.cy > H * 0.25) return "ELEMENT";
+        if (small && side && r.cy > H * 0.22) return "ELEMENT";
 
         if (r.h > H * 0.4 && r.w > W * 0.3) {
-            if (r.b > H * 0.9 && r.w > W * 0.42) return "CHAIR";
+            if (r.b > H * 0.9 && r.w > W * 0.42 && r.cx > W * 0.4 && r.cx < W * 0.6) return "CHAIR";
+            if (r.cx < W * 0.47) return "PERSON";     // big thing on the left = mascot / character
             if (r.h > H * 0.55) return "PHONE";
             return "PERSON";
         }
@@ -457,16 +487,18 @@
 
     // Where each sticker is "born": chair for the low ones, the character's
     // head/shoulders for the high ones, the phone edge for everything between.
+    // Where each sticker is "born": the chair for low ones (if there is a
+    // chair), otherwise whichever of character / phone is closer sideways.
+    // The start point sits inside that object, at the sticker's height.
     function emitterFor(r, scene, W) {
-        var side = r.cx < W / 2 ? -1 : 1;
         var src;
-        if (r.cy >= scene.chair.t + 100 * U) src = scene.chair;
-        else if (r.cy <= scene.person.t + 180 * U) src = scene.person;
-        else src = scene.phone;
-        var x = src.cx + side * src.w * 0.22;
-        var y = clamp(r.cy, src.t + 40 * U, src.b - 40 * U);
-        y = lerp(y, src.cy, 0.3);
-        return [x, y];
+        if (scene.hasChair && r.cy >= scene.chair.t + 100 * U) src = scene.chair;
+        else if (!scene.hasPerson) src = scene.phone;
+        else if (!scene.hasPhone) src = scene.person;
+        else src = Math.abs(r.cx - scene.person.cx) < Math.abs(r.cx - scene.phone.cx) ? scene.person : scene.phone;
+        var x = clamp(r.cx, src.l + src.w * 0.25, src.r - src.w * 0.25);
+        var y = clamp(r.cy, src.t + src.h * 0.15, src.b - src.h * 0.15);
+        return [lerp(x, src.cx, 0.5), lerp(y, src.cy, 0.4)];
     }
 
     // ------------------------------------------------------------------
@@ -572,6 +604,43 @@
         addExpr(pScl(L), "var t0 = " + (t + 0.6) + ";\nvar r = ease(time, t0, t0 + 1, 0, 1);\nvalue * (1 + 0.006 * Math.sin((time - t0) * 2) * r);");
     }
 
+    // Mascot entrance (no chair): flies in from bottom-left, lands, hovers.
+    function animMascot(it, pivot) {
+        var L = it.layer, t = TIMING.person;
+        setAnchorToCompPoint(L, rootToLocal(it, pivot));
+        var p = vec2(pPos(L)), d = 1 / it.xf.s;
+        K(pPos(L), [t, t + 0.45, t + 0.62, t + 0.8],
+            [[p[0] - 260 * U * d, p[1] + 520 * U * d], [p[0] + 10 * U * d, p[1] - 30 * U * d], [p[0], p[1] + 8 * U * d], p]);
+        K(pRot(L), [t, t + 0.45, t + 0.7], [-18, 4, 0]);
+        K(pScl(L), [t, t + 0.45, t + 0.62, t + 0.8], [[80, 80], [102, 106], [104, 96], [100, 100]]);
+        K(pOpa(L), [t, t + 0.12], [0, 100]);
+        var t0 = (t + 0.8).toFixed(3);
+        addExpr(pPos(L), "var t0 = " + t0 + ";\nvar r = ease(time, t0, t0 + 0.8, 0, 1);\n" +
+            "value + [0, Math.sin((time - t0) * 2.4) * " + (10 * U * d).toFixed(2) + " * r];");
+        addExpr(pRot(L), "var t0 = " + t0 + ";\nvar r = ease(time, t0, t0 + 0.8, 0, 1);\n" +
+            "value + Math.sin((time - t0) * 1.2 + 1) * 1.5 * r;");
+    }
+
+    // Phone pops out of the mascot's hand (pivot = lower-left of the phone).
+    function animPhoneFromHand(it, pivot, t) {
+        var L = it.layer;
+        setAnchorToCompPoint(L, rootToLocal(it, pivot));
+        K(pScl(L), [t, t + 0.35, t + 0.5, t + 0.65], [[0, 0], [107, 107], [97, 97], [100, 100]]);
+        K(pRot(L), [t, t + 0.35, t + 0.6], [14, -3, 0]);
+        K(pOpa(L), [t, t + 0.08], [0, 100]);
+    }
+
+    // Eyes: pop on with the mascot, then blink (squash Y) every ~3 s.
+    function animEyes(it, t) {
+        var L = it.layer, r = it.rect;
+        setAnchorToCompPoint(L, rootToLocal(it, [r.cx, r.cy]));
+        var t0 = (t + 1.0).toFixed(3);
+        addExpr(pScl(L), "var t0 = " + t0 + ";\nvar v = value;\n" +
+            "if (time > t0) {\n  var lt = (time - t0) % 3.2;\n" +
+            "  if (lt < 0.16) v[1] = v[1] * (1 - 0.9 * Math.sin(lt / 0.16 * Math.PI));\n}\nv;");
+        addExpr(pOpa(L), "var t0 = " + t0 + ";\nvalue * (0.85 + 0.15 * Math.sin(time * 3));");
+    }
+
     function addWipe(L, t, dur, angle) {
         try {
             var fx = L.property("ADBE Effect Parade").addProperty("ADBE Linear Wipe");
@@ -612,8 +681,7 @@
     function animAccent(it, i) {
         var L = it.layer, t = TIMING.accent + i * 0.1;
         var r = it.rect;
-        // Pivot on the right edge: it springs out of the main headline (RTL)
-        setAnchorToCompPoint(L, rootToLocal(it, [r.r, r.cy]));
+        setAnchorToCompPoint(L, rootToLocal(it, [r.cx, r.cy]));
         K(pScl(L), [t, t + 0.3, t + 0.45, t + 0.6], [[0, 0], [120, 120], [95, 95], [100, 100]]);
         K(pRot(L), [t, t + 0.3, t + 0.5], [-10, 4, 0]);
         K(pOpa(L), [t, t + 0.08], [0, 100]);
@@ -848,7 +916,9 @@
         // so any layout works (no chair / no phone is fine).
         var rPhone = unionRect(items, "PHONE"), rChair = unionRect(items, "CHAIR"), rPerson = unionRect(items, "PERSON");
         var rCenter = fallbackRect(W * 0.3, H * 0.3, W * 0.7, H * 0.85);
+        if (!rChair) { for (var tk in TIMING_NO_CHAIR) TIMING[tk] = TIMING_NO_CHAIR[tk]; }
         var scene = {
+            hasChair: !!rChair, hasPhone: !!rPhone, hasPerson: !!rPerson,
             phone: rPhone || rPerson || rChair || rCenter,
             chair: rChair || rPhone || rPerson || rCenter,
             person: rPerson || rPhone || rChair || rCenter
@@ -856,6 +926,7 @@
         var chairPivot = [scene.chair.cx, scene.chair.b];
         var phonePivot = [scene.phone.cx, scene.phone.b];
         var personPivot = [scene.person.cx, scene.person.t + scene.person.h * 0.92];
+        var handPivot = [scene.phone.l + scene.phone.w * 0.15, scene.phone.b - scene.phone.h * 0.12];
 
         makeController(root);
 
@@ -876,6 +947,16 @@
         };
         var glowParented = [];
         for (var g1 = 0; g1 < by.PHONE_GLOW.length; g1++) glowParented.push(tryParent(by.PHONE_GLOW[g1]));
+        // Separate eye layers follow the robot they belong to
+        for (var ey = 0; ey < by.EYES.length; ey++) {
+            for (var pr = 0; pr < by.PERSON.length; pr++) {
+                if (by.PERSON[pr].comp === by.EYES[ey].comp) {
+                    setAnchorToCompPoint(by.EYES[ey].layer, rootToLocal(by.EYES[ey], [by.EYES[ey].rect.cx, by.EYES[ey].rect.cy]));
+                    try { by.EYES[ey].layer.parent = by.PERSON[pr].layer; } catch (ep) {}
+                    break;
+                }
+            }
+        }
         var uiParented = [];
         for (var u1 = 0; u1 < by.PHONE_UI.length; u1++) uiParented.push(tryParent(by.PHONE_UI[u1]));
 
@@ -884,7 +965,10 @@
         for (a = 0; a < by.BG_FLOAT.length; a++) animBGFloat(by.BG_FLOAT[a], a);
         for (a = 0; a < by.LOGO.length; a++) animLogo(by.LOGO[a], a);
         for (a = 0; a < by.CHAIR.length; a++) animChair(by.CHAIR[a], chairPivot);
-        for (a = 0; a < by.PHONE.length; a++) animPhone(by.PHONE[a], phonePivot, TIMING.phone);
+        for (a = 0; a < by.PHONE.length; a++) {
+            if (rChair) animPhone(by.PHONE[a], phonePivot, TIMING.phone);
+            else animPhoneFromHand(by.PHONE[a], handPivot, TIMING.phone);
+        }
         for (a = 0; a < by.PHONE_GLOW.length; a++) animGlow(by.PHONE_GLOW[a], phonePivot, glowParented[a]);
         for (a = 0; a < by.PHONE_UI.length; a++) {
             if (!uiParented[a]) {
@@ -893,7 +977,11 @@
             }
             animPhoneUI(by.PHONE_UI[a], a);
         }
-        for (a = 0; a < by.PERSON.length; a++) animPerson(by.PERSON[a], personPivot);
+        for (a = 0; a < by.PERSON.length; a++) {
+            if (rChair) animPerson(by.PERSON[a], personPivot);
+            else animMascot(by.PERSON[a], personPivot);
+        }
+        for (a = 0; a < by.EYES.length; a++) animEyes(by.EYES[a], TIMING.person);
         for (a = 0; a < by.HEADLINE.length; a++) animHeadline(by.HEADLINE[a], a);
         for (a = 0; a < by.HEADLINE_ACCENT.length; a++) animAccent(by.HEADLINE_ACCENT[a], a);
 
@@ -1002,7 +1090,7 @@
                 if (by.CHAIR.length) { mark(TIMING.chair, "SFX: whoosh up"); mark(TIMING.chair + 0.62, "SFX: soft thump"); }
                 if (by.PHONE.length) mark(TIMING.phone, "SFX: rise / swell (phone)");
                 if (by.PHONE_GLOW.length) mark(TIMING.glow, "SFX: neon buzz");
-                if (by.PERSON.length) mark(TIMING.person, "SFX: pop (main subject)");
+                if (by.PERSON.length) mark(TIMING.person, rChair ? "SFX: pop (main subject)" : "SFX: whoosh + landing (robot)");
                 if (by.HEADLINE.length) mark(TIMING.headline, "SFX: swipe (headline)");
                 for (var pm = 0; pm < popTimes.length; pm++) mark(popTimes[pm], "SFX: pop " + (pm + 1));
                 if (by.FOOTER.length) mark(TIMING.footer, "SFX: soft whoosh (footer)");
