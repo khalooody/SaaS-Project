@@ -1046,7 +1046,8 @@
 
     // Create the render folder up front so a missing/locked folder shows now
     var RF = new Folder(CONFIG.projectFolder + "\\" + CONFIG.renderFolderName);
-    if (new Folder(CONFIG.projectFolder).exists && !RF.exists && !RF.create()) {
+    if (new Folder(CONFIG.projectFolder).exists && !RF.exists) RF.create();
+    if (new Folder(CONFIG.projectFolder).exists && !RF.exists) {
         alert("Could not create the render folder:\n" + RF.fsName + "\n\n" + (RF.error || ""));
         return;
     }
