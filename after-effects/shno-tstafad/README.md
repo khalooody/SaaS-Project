@@ -23,8 +23,11 @@ D:\2026\تحريك بوستات\تحريك بوست جديد\
 
 ## التشغيل
 
-1. حط `Shno_Tstafad_Animator.jsx` بالفولدر (أو بأي مكان).
-2. After Effects ← `File > Scripts > Run Script File` ← اختار السكربت.
+1. حط `Shno_Tstafad_Animator.jsx` و `Run_Shno_Tstafad.bat` سوية بالفولدر.
+2. **دبل كلك على `Run_Shno_Tstafad.bat`**: يفتح After Effects ويشغّل السكربت.
+   أو من داخل After Effects: `File > Scripts > Run Script File` ← اختار السكربت.
+   أول مرة فقط: `Edit > Preferences > Scripting & Expressions` ← فعّل
+   **Allow Scripts to Write Files and Access Network**، حتى يگدر يحفظ ويرندر.
 3. بالنافذة راجع عمودين لكل لير:
    - **Role**: نوع الحركة (خلفية، لوگو، عنوان، الشخصية، عنصر Pop + Wiggle، فوتر...).
    - **Brand**: `All versions` أو `Alwatani only` أو `Earthlink only`.
